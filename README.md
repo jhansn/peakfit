@@ -13,15 +13,15 @@ This repo focuses on:
 ## How Peak Position Is Computed
 For each selected wavelength window, we fit a local quadratic:
 
-\[
+$$
 y = a x^2 + b x + c
-\]
+$$
 
 and use the analytic extremum location:
 
-\[
+$$
 x_{\mathrm{ext}} = -\frac{b}{2a}
-\]
+$$
 
 - if `mode="min"`, we require `a > 0`;
 - if `mode="max"`, we require `a < 0`.
@@ -74,4 +74,3 @@ This gives a direct stability threshold for instrument spacing vs required peak 
 uv sync --all-groups
 uv run jupyter notebook notebooks/peakfit_lab_swir.ipynb
 ```
-
