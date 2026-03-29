@@ -1,0 +1,10 @@
+.venv/
+data/
+# accidental namespace shadow (real package lives under src/)
+/peakfit/
+.ipynb_checkpoints/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+dist/
+*.egg-info/
