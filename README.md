@@ -74,3 +74,17 @@ This gives a direct stability threshold for instrument spacing vs required peak 
 uv sync --all-groups
 uv run jupyter notebook notebooks/peakfit_lab_swir.ipynb
 ```
+
+## Docker CI Stages
+Multi-stage Docker targets are provided for lint, build, and tests.
+
+```bash
+# Lint (ruff)
+docker build --target lint -t peakfit:lint .
+
+# Build wheel/sdist
+docker build --target build -t peakfit:build .
+
+# Run tests
+docker build --target test -t peakfit:test .
+```
