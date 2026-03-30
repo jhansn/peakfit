@@ -90,3 +90,11 @@ docker build --target build -t peakfit:build .
 # Run tests
 docker build --target test -t peakfit:test .
 ```
+
+## References
+Polynomial fitting for absorption feature localization has been used in hyperspectral spectroscopy, for example:
+
+Rodger, A., Laukamp, C., Haest, M., & Cudahy, T. (2012).  
+*A simple quadratic method of absorption feature wavelength estimation in continuum-removed spectra.*  
+Remote Sensing of Environment, 118, 273-283.  
+https://doi.org/10.1016/j.rse.2011.11.015
