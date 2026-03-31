@@ -5,7 +5,7 @@ description = "A package that fits a peak to discretely sampled data."
 authors = [
     {name = "Jan Hansen", email = "hansnpunk@googlemail.com"},
 ]
-license = "GPL-3.0-or-later"
+license = "MIT"
 readme = "README.md"
 requires-python = ">=3.11, <4.0"
 dependencies = [
