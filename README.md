@@ -197,6 +197,26 @@ peak_nm, valid = peak_map(
 )
 ```
 
+### Plot the peak map
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+# peak_nm, valid come from peak_map(...)
+peak_plot = np.where(valid, peak_nm, np.nan)
+
+# Robust color limits for stable visual comparison.
+vmin, vmax = np.nanpercentile(peak_plot, [2, 98])
+
+plt.figure(figsize=(8, 5))
+im = plt.imshow(peak_plot, cmap="turbo", vmin=vmin, vmax=vmax)
+plt.title("Peak position map (nm)")
+plt.axis("off")
+plt.colorbar(im, label="Wavelength (nm)")
+plt.tight_layout()
+plt.show()
+```
+
 ## Docker CI Stages
 ```bash
 # Lint (ruff)
