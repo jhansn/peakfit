@@ -18,6 +18,21 @@ Core implementation:
 - `src/peakfit/polynomial.py`
 - `src/peakfit/cube.py`
 
+## Data Sources
+This project uses two external datasets in the notebook:
+
+1. **USGS spectral library / lab spectra**  
+   - Becker et al., *VNIR and SWIR Spectra of Select Altered Mafic and Ultramafic Rock Samples*  
+   - DOI: https://doi.org/10.5066/P146B9KF  
+   - File used: `ASD_FieldSpec6056.CSV`  
+   - Coverage is VNIR+SWIR in source, and the notebook explicitly subsets to **SWIR** for analysis.
+
+2. **External close-range ENVI cubes**  
+   - Repository: https://github.com/panjoel4/ML-MineralMapping-Hyperspectral  
+   - Files used: `10a_101012-120551_refl_ss.*`, `60a_101012-114407_refl_ss.*`  
+   - Repository docs describe **SWIR** coverage around **1043–2486 nm**.  
+   - Note: these ENVI headers do not contain explicit wavelength vectors, so the notebook uses a linear 1043–2486 nm axis across bands.
+
 ## Extremum Model
 For a local quadratic fit:
 
