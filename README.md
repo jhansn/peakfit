@@ -72,7 +72,7 @@ Cubic:
 ### Asymmetric synthetic walkthrough (cubic)
 ![Interpolation walkthrough asymmetric cubic](docs/figures/interpolation_walkthrough_asymmetric_cubic.gif)
 
-### 7. Noise robustness (symmetric + asymmetric; absolute + excess error)
+### 7. Noise robustness (symmetric + asymmetric; absolute error)
 This figure combines:
 - top row: example noisy curves,
 - bottom row: absolute error `|estimated - true|`.
