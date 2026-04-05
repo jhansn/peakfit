@@ -3,7 +3,7 @@ name = "peakfit"
 version = "1.0.0"
 description = "Subsample peak fitting and enriched absorption-feature extraction for discretely sampled spectra and hyperspectral cubes."
 authors = [
-    {name = "Jan Hansen", email = "hansnpunk@googlemail.com"},
+    {name = "Jan Hansen", email = "hansnpunkt@googlemail.com"},
 ]
 license = "MIT"
 readme = "README.md"
