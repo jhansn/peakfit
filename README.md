@@ -272,6 +272,63 @@ peak_nm, valid = peak_map(
 )
 ```
 
+### Compute and plot enriched features from NumPy input
+```python
+import matplotlib.pyplot as plt
+import numpy as np
+
+from peakfit import extract_absorption_feature
+
+# 1-D spectrum and wavelength axis.
+wl_nm = np.linspace(2150.0, 2250.0, 101)
+y = 1.0 - 0.08 * np.exp(-0.5 * ((wl_nm - 2217.4) / 8.0) ** 2)
+
+feature = extract_absorption_feature(
+    wl_nm,
+    y,
+    degree=2,
+    continuum="none",      # use "linear" or "hull" for raw spectra
+    n_iterations=3,
+    half_width=4,
+)
+
+print("center:", feature.support.center_x)
+print("depth:", feature.metrics.depth)
+print("width:", feature.metrics.width)
+print("area:", feature.metrics.area)
+
+plt.figure(figsize=(8, 4))
+plt.plot(wl_nm, feature.continuum_removed, lw=1.8, label="continuum-removed")
+plt.axvline(feature.support.center_x, color="tab:red", ls="--", label="center")
+plt.scatter(
+    [feature.support.left_x, feature.support.right_x],
+    np.interp(
+        [feature.support.left_x, feature.support.right_x],
+        wl_nm,
+        feature.continuum_removed,
+    ),
+    color="tab:blue",
+    zorder=3,
+    label="support",
+)
+plt.fill_between(
+    wl_nm,
+    feature.continuum_removed,
+    1.0,
+    where=(wl_nm >= feature.support.left_x) & (wl_nm <= feature.support.right_x),
+    alpha=0.15,
+    color="goldenrod",
+    label="area",
+)
+plt.title("Enriched absorption feature")
+plt.xlabel("Wavelength (nm)")
+plt.ylabel("Continuum-removed signal")
+plt.grid(True, alpha=0.25)
+plt.legend()
+plt.tight_layout()
+plt.show()
+```
+
 ### Plot the peak map
 ```python
 import numpy as np
