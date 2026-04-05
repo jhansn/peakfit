@@ -1,7 +1,7 @@
 [project]
 name = "peakfit"
-version = "0.1.0"
-description = "A package that fits a peak to discretely sampled data."
+version = "1.0.0"
+description = "Subsample peak fitting and enriched absorption-feature extraction for discretely sampled spectra and hyperspectral cubes."
 authors = [
     {name = "Jan Hansen", email = "hansnpunk@googlemail.com"},
 ]
