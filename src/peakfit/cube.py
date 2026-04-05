@@ -1,7 +1,8 @@
-"""Hyperspectral cube I/O and per-pixel peak mapping."""
+"""Hyperspectral cube I/O, peak mapping, and scalar feature maps."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Literal
 
 import numpy as np
@@ -10,6 +11,165 @@ from peakfit.continuum import ContinuumMethod, continuum_remove_rows
 from peakfit.polynomial import Mode
 from peakfit.refine import PeakRefinementResult, refine_peak_subsample
 from peakfit.wavelength import index_to_wavelength
+
+ScalarFeatureName = Literal[
+    "center",
+    "depth",
+    "width",
+    "area",
+    "left_width",
+    "right_width",
+    "left_area",
+    "right_area",
+    "asymmetry_width",
+    "asymmetry_area",
+    "left_slope",
+    "right_slope",
+]
+
+FAST_SCALAR_FEATURE_NAMES: tuple[ScalarFeatureName, ...] = (
+    "center",
+    "depth",
+    "width",
+    "left_width",
+    "right_width",
+    "asymmetry_width",
+    "left_slope",
+    "right_slope",
+)
+
+SCALAR_FEATURE_NAMES: tuple[ScalarFeatureName, ...] = (
+    "center",
+    "depth",
+    "width",
+    "area",
+    "left_width",
+    "right_width",
+    "left_area",
+    "right_area",
+    "asymmetry_width",
+    "asymmetry_area",
+    "left_slope",
+    "right_slope",
+)
+
+
+@dataclass(frozen=True)
+class AbsorptionFeatureMaps:
+    """Scalar absorption-feature maps with attribute access."""
+
+    valid: np.ndarray
+    center: np.ndarray | None = None
+    depth: np.ndarray | None = None
+    width: np.ndarray | None = None
+    area: np.ndarray | None = None
+    left_width: np.ndarray | None = None
+    right_width: np.ndarray | None = None
+    left_area: np.ndarray | None = None
+    right_area: np.ndarray | None = None
+    asymmetry_width: np.ndarray | None = None
+    asymmetry_area: np.ndarray | None = None
+    left_slope: np.ndarray | None = None
+    right_slope: np.ndarray | None = None
+
+    def as_dict(self) -> dict[str, np.ndarray]:
+        """Return only the populated scalar feature maps."""
+        return {
+            name: value
+            for name in SCALAR_FEATURE_NAMES
+            if (value := getattr(self, name)) is not None
+        }
+
+    def __getitem__(self, name: ScalarFeatureName) -> np.ndarray:
+        value = getattr(self, name)
+        if value is None:
+            raise KeyError(name)
+        return value
+
+    def keys(self) -> tuple[str, ...]:
+        return tuple(self.as_dict().keys())
+
+    def items(self):
+        return self.as_dict().items()
+
+    def values(self):
+        return self.as_dict().values()
+
+
+def _smooth_rows3(y2d: np.ndarray) -> np.ndarray:
+    yp = np.pad(y2d, ((0, 0), (1, 1)), mode="edge")
+    return (yp[:, :-2] + yp[:, 1:-1] + yp[:, 2:]) / 3.0
+
+
+def _nearest_indices_on_axis(x: np.ndarray, points: np.ndarray) -> np.ndarray:
+    hi = np.searchsorted(x, points, side="left")
+    hi = np.clip(hi, 1, x.size - 1)
+    lo = hi - 1
+    d_lo = np.abs(points - x[lo])
+    d_hi = np.abs(x[hi] - points)
+    return np.where(d_hi < d_lo, hi, lo).astype(np.int64)
+
+
+def _interp_rows_at_points(x: np.ndarray, y2d: np.ndarray, points: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    hi = np.searchsorted(x, points, side="left")
+    hi = np.clip(hi, 1, x.size - 1)
+    lo = hi - 1
+    x0 = x[lo]
+    x1 = x[hi]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        t = (points - x0) / (x1 - x0)
+    rows = np.arange(y2d.shape[0], dtype=np.intp)
+    y0 = y2d[rows, lo]
+    y1 = y2d[rows, hi]
+    yv = y0 + t * (y1 - y0)
+    return yv, lo, hi
+
+
+def _find_support_indices_batch(
+    y_support: np.ndarray,
+    center_idx: np.ndarray,
+    boundary_level: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    p, k = y_support.shape
+    local_max = np.zeros((p, k), dtype=bool)
+    if k >= 3:
+        local_max[:, 1:-1] = (y_support[:, 1:-1] >= y_support[:, :-2]) & (y_support[:, 1:-1] >= y_support[:, 2:])
+
+    rows = np.arange(p, dtype=np.intp)
+    left_idx = np.full(p, -1, dtype=np.int64)
+    right_idx = np.full(p, -1, dtype=np.int64)
+    left_done = np.zeros(p, dtype=bool)
+    right_done = np.zeros(p, dtype=bool)
+
+    for off in range(1, k):
+        li = center_idx - off
+        active_l = (~left_done) & (li >= 1)
+        if np.any(active_l):
+            cand_l = active_l & (local_max[rows, np.clip(li, 0, k - 1)] | (y_support[rows, np.clip(li, 0, k - 1)] >= boundary_level))
+            left_idx[cand_l] = li[cand_l]
+            left_done[cand_l] = True
+
+        ri = center_idx + off
+        active_r = (~right_done) & (ri <= (k - 2))
+        if np.any(active_r):
+            cand_r = active_r & (local_max[rows, np.clip(ri, 0, k - 1)] | (y_support[rows, np.clip(ri, 0, k - 1)] >= boundary_level))
+            right_idx[cand_r] = ri[cand_r]
+            right_done[cand_r] = True
+
+        if np.all(left_done & right_done):
+            break
+
+    left_edge = (~left_done) & (y_support[:, 0] >= boundary_level)
+    right_edge = (~right_done) & (y_support[:, -1] >= boundary_level)
+    left_idx[left_edge] = 0
+    right_idx[right_edge] = k - 1
+    return left_idx, right_idx
+
+
+def _prefix_trapezoid_areas(x: np.ndarray, y2d: np.ndarray) -> np.ndarray:
+    dx = np.diff(x)
+    seg = 0.5 * ((1.0 - y2d[:, :-1]) + (1.0 - y2d[:, 1:])) * dx[None, :]
+    return np.pad(np.cumsum(seg, axis=1), ((0, 0), (1, 0)))
 
 
 def _window_sum(
@@ -546,3 +706,201 @@ def peak_map(
             valid[i, j] = True
 
     return peaks, valid
+
+
+def absorption_feature_map(
+    cube: np.ndarray,
+    wavelengths: np.ndarray,
+    band_start: int,
+    band_stop: int,
+    *,
+    degree: Literal[2, 3] = 2,
+    n_iterations: int = 3,
+    half_width: int = 3,
+    continuum: ContinuumMethod = "none",
+    continuum_eps: float = 1e-12,
+    boundary_tol: float = 0.01,
+    smooth_support: bool = True,
+    output_wavelength: bool = True,
+    feature_names: tuple[ScalarFeatureName, ...] = SCALAR_FEATURE_NAMES,
+    peak_positions: np.ndarray | None = None,
+    valid_mask: np.ndarray | None = None,
+) -> AbsorptionFeatureMaps:
+    """Scalar absorption-feature maps for every valid pixel in a spectral window.
+
+    This reuses minima from :func:`peak_map` when `peak_positions` and `valid_mask`
+    are provided, otherwise it computes them internally.
+    """
+    if cube.ndim != 3:
+        raise ValueError("cube must have shape (M, N, n_bands)")
+    requested = tuple(dict.fromkeys(feature_names))
+    invalid = [name for name in requested if name not in SCALAR_FEATURE_NAMES]
+    if invalid:
+        raise ValueError(f"unknown feature names: {invalid}")
+    if not requested:
+        raise ValueError("feature_names must not be empty")
+    w = np.asarray(wavelengths, dtype=np.float64)
+    if w.ndim != 1:
+        raise ValueError("wavelengths must be 1-D")
+    n_bands = cube.shape[2]
+    if w.size != n_bands:
+        raise ValueError("wavelengths length must match cube spectral dimension")
+    if band_start < 0 or band_stop > n_bands or band_start >= band_stop:
+        raise ValueError("invalid band window")
+
+    m, n = cube.shape[0], cube.shape[1]
+    if peak_positions is None or valid_mask is None:
+        peak_positions, valid_mask = peak_map(
+            cube,
+            w,
+            band_start,
+            band_stop,
+            degree=degree,
+            n_iterations=n_iterations,
+            half_width=half_width,
+            mode="min",
+            output_wavelength=output_wavelength,
+            continuum=continuum,
+            continuum_eps=continuum_eps,
+        )
+    else:
+        peak_positions = np.asarray(peak_positions, dtype=np.float64)
+        valid_mask = np.asarray(valid_mask, dtype=bool)
+        if peak_positions.shape != (m, n) or valid_mask.shape != (m, n):
+            raise ValueError("peak_positions and valid_mask must match cube spatial shape")
+
+    x = w[band_start:band_stop] if output_wavelength else np.arange(band_start, band_stop, dtype=np.float64)
+    y2d = np.asarray(cube[:, :, band_start:band_stop], dtype=np.float64).reshape(m * n, -1)
+    if continuum == "none":
+        y2d_cr = y2d.copy()
+    else:
+        y2d_cr = continuum_remove_rows(x, y2d, method=continuum, eps=continuum_eps)
+
+    peak_flat = np.asarray(peak_positions, dtype=np.float64).reshape(-1)
+    valid_seed = np.asarray(valid_mask, dtype=bool).reshape(-1) & np.isfinite(peak_flat)
+    include_area = any(name in {"area", "left_area", "right_area", "asymmetry_area"} for name in requested)
+
+    out = {name: np.full(m * n, np.nan, dtype=np.float64) for name in requested}
+    valid = np.zeros(m * n, dtype=bool)
+
+    rows = np.flatnonzero(valid_seed)
+    if rows.size == 0:
+        return AbsorptionFeatureMaps(valid=valid.reshape(m, n), **{name: arr.reshape(m, n) for name, arr in out.items()})
+
+    y_rows = y2d_cr[rows]
+    px = peak_flat[rows]
+    in_bounds = (px >= float(x[0])) & (px <= float(x[-1]))
+    if not np.all(in_bounds):
+        rows = rows[in_bounds]
+        y_rows = y_rows[in_bounds]
+        px = px[in_bounds]
+    if rows.size == 0:
+        return AbsorptionFeatureMaps(valid=valid.reshape(m, n), **{name: arr.reshape(m, n) for name, arr in out.items()})
+
+    center_idx = _nearest_indices_on_axis(x, px)
+    y_support = _smooth_rows3(y_rows) if smooth_support else y_rows
+    left_idx, right_idx = _find_support_indices_batch(y_support, center_idx, 1.0 - boundary_tol)
+
+    ok = (left_idx >= 0) & (right_idx >= 0) & (left_idx < center_idx) & (center_idx < right_idx)
+    if not np.any(ok):
+        return AbsorptionFeatureMaps(valid=valid.reshape(m, n), **{name: arr.reshape(m, n) for name, arr in out.items()})
+
+    rows = rows[ok]
+    y_rows = y_rows[ok]
+    px = px[ok]
+    center_idx = center_idx[ok]
+    left_idx = left_idx[ok]
+    right_idx = right_idx[ok]
+
+    left_x = x[left_idx]
+    right_x = x[right_idx]
+    inside = (left_x < px) & (px < right_x)
+    if not np.all(inside):
+        rows = rows[inside]
+        y_rows = y_rows[inside]
+        px = px[inside]
+        center_idx = center_idx[inside]
+        left_idx = left_idx[inside]
+        right_idx = right_idx[inside]
+        left_x = left_x[inside]
+        right_x = right_x[inside]
+    if rows.size == 0:
+        return AbsorptionFeatureMaps(valid=valid.reshape(m, n), **{name: arr.reshape(m, n) for name, arr in out.items()})
+
+    y_center, lo_idx, _ = _interp_rows_at_points(x, y_rows, px)
+    p_rows = np.arange(rows.size, dtype=np.intp)
+    y_left = y_rows[p_rows, left_idx]
+    y_right = y_rows[p_rows, right_idx]
+
+    depth = 1.0 - y_center
+    width = right_x - left_x
+    left_width = px - left_x
+    right_width = right_x - px
+    asymmetry_width = (right_width - left_width) / width
+    left_slope = (y_center - y_left) / left_width
+    right_slope = (y_right - y_center) / right_width
+
+    metric_ok = np.isfinite(depth) & (depth > 0.0) & np.isfinite(width) & (width > 0.0)
+    metric_ok &= np.isfinite(left_width) & (left_width > 0.0) & np.isfinite(right_width) & (right_width > 0.0)
+    metric_ok &= np.isfinite(left_slope) & np.isfinite(right_slope) & np.isfinite(asymmetry_width)
+
+    area = left_area = right_area = asymmetry_area = None
+    if include_area:
+        prefix = _prefix_trapezoid_areas(x, y_rows)
+        total_area = prefix[p_rows, right_idx] - prefix[p_rows, left_idx]
+        x_lo = x[lo_idx]
+        y_lo = y_rows[p_rows, lo_idx]
+        partial = 0.5 * ((1.0 - y_lo) + (1.0 - y_center)) * (px - x_lo)
+        left_area_v = prefix[p_rows, lo_idx] - prefix[p_rows, left_idx] + partial
+        right_area_v = total_area - left_area_v
+        with np.errstate(divide="ignore", invalid="ignore"):
+            asymmetry_area_v = (right_area_v - left_area_v) / total_area
+        metric_ok &= np.isfinite(total_area) & (total_area > 0.0)
+        metric_ok &= np.isfinite(left_area_v) & np.isfinite(right_area_v) & np.isfinite(asymmetry_area_v)
+        area = total_area
+        left_area = left_area_v
+        right_area = right_area_v
+        asymmetry_area = asymmetry_area_v
+
+    if not np.any(metric_ok):
+        return {name: arr.reshape(m, n) for name, arr in out.items()}, valid.reshape(m, n)
+
+    rows = rows[metric_ok]
+    px = px[metric_ok]
+    depth = depth[metric_ok]
+    width = width[metric_ok]
+    left_width = left_width[metric_ok]
+    right_width = right_width[metric_ok]
+    asymmetry_width = asymmetry_width[metric_ok]
+    left_slope = left_slope[metric_ok]
+    right_slope = right_slope[metric_ok]
+    if include_area:
+        area = area[metric_ok]
+        left_area = left_area[metric_ok]
+        right_area = right_area[metric_ok]
+        asymmetry_area = asymmetry_area[metric_ok]
+
+    value_map: dict[str, np.ndarray] = {
+        "center": px,
+        "depth": depth,
+        "width": width,
+        "left_width": left_width,
+        "right_width": right_width,
+        "asymmetry_width": asymmetry_width,
+        "left_slope": left_slope,
+        "right_slope": right_slope,
+    }
+    if include_area:
+        value_map["area"] = area
+        value_map["left_area"] = left_area
+        value_map["right_area"] = right_area
+        value_map["asymmetry_area"] = asymmetry_area
+
+    for name in requested:
+        out[name][rows] = value_map[name]
+    valid[rows] = True
+
+    return AbsorptionFeatureMaps(
+        valid=valid.reshape(m, n),
+        **{name: arr.reshape(m, n) for name, arr in out.items()},
+    )

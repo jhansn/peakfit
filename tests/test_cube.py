@@ -1,6 +1,12 @@
 import numpy as np
+import pytest
 
-from peakfit.cube import peak_map
+from peakfit.cube import (
+    SCALAR_FEATURE_NAMES,
+    absorption_feature_map,
+    peak_map,
+)
+from peakfit.features import extract_absorption_feature
 from peakfit.refine import refine_peak_subsample
 from peakfit.wavelength import index_to_wavelength
 
@@ -254,3 +260,151 @@ def test_peak_map_cubic_batched_matches_generic_hull():
         output_wavelength=True,
         atol=1e-6,
     )
+
+
+def test_absorption_feature_map_matches_scalar_reference_linear():
+    rng = np.random.default_rng(23)
+    h, w, b = 4, 5, 36
+    wl = np.linspace(1000.0, 2500.0, b)
+    axis = np.arange(b, dtype=np.float64)
+    cube = 0.32 + 0.0015 * axis[None, None, :] + rng.normal(0.0, 0.004, size=(h, w, b))
+    cube -= 0.07 * np.exp(-0.5 * ((axis - 18.4) / 2.7) ** 2)[None, None, :]
+
+    b0, b1 = 11, 27
+    peaks, valid0 = peak_map(
+        cube,
+        wl,
+        b0,
+        b1,
+        degree=2,
+        n_iterations=3,
+        half_width=4,
+        mode="min",
+        output_wavelength=True,
+        continuum="linear",
+    )
+    maps = absorption_feature_map(
+        cube,
+        wl,
+        b0,
+        b1,
+        degree=2,
+        n_iterations=3,
+        half_width=4,
+        continuum="linear",
+        feature_names=SCALAR_FEATURE_NAMES,
+        peak_positions=peaks,
+        valid_mask=valid0,
+    )
+
+    valid = maps.valid
+    assert set(maps.keys()) == set(SCALAR_FEATURE_NAMES)
+
+    x = wl[b0:b1]
+    for i in range(h):
+        for j in range(w):
+            if not valid[i, j]:
+                assert np.isnan(maps["depth"][i, j])
+                continue
+            feat = extract_absorption_feature(
+                x,
+                cube[i, j, b0:b1],
+                degree=2,
+                n_iterations=3,
+                half_width=4,
+                continuum="linear",
+            )
+            assert maps["center"][i, j] == pytest.approx(feat.support.center_x, abs=1e-8)
+            assert maps["depth"][i, j] == pytest.approx(feat.metrics.depth, abs=1e-8)
+            assert maps["width"][i, j] == pytest.approx(feat.metrics.width, abs=1e-8)
+            assert maps["area"][i, j] == pytest.approx(feat.metrics.area, abs=1e-8)
+            assert maps["asymmetry_area"][i, j] == pytest.approx(feat.metrics.asymmetry_area, abs=1e-8)
+
+
+def test_absorption_feature_map_output_index_units():
+    rng = np.random.default_rng(29)
+    h, w, b = 3, 4, 34
+    wl = np.linspace(1000.0, 2500.0, b)
+    axis = np.arange(b, dtype=np.float64)
+    cube = 1.0 + rng.normal(0.0, 0.003, size=(h, w, b))
+    cube -= 0.06 * np.exp(-0.5 * ((axis - 16.1) / 2.5) ** 2)[None, None, :]
+
+    b0, b1 = 9, 24
+    peaks, valid0 = peak_map(
+        cube,
+        wl,
+        b0,
+        b1,
+        degree=2,
+        n_iterations=3,
+        half_width=4,
+        mode="min",
+        output_wavelength=False,
+        continuum="none",
+    )
+    maps = absorption_feature_map(
+        cube,
+        wl,
+        b0,
+        b1,
+        degree=2,
+        n_iterations=3,
+        half_width=4,
+        continuum="none",
+        output_wavelength=False,
+        peak_positions=peaks,
+        valid_mask=valid0,
+    )
+
+    valid = maps.valid
+    assert np.array_equal(valid, valid0)
+    assert np.allclose(maps["center"][valid], peaks[valid], atol=1e-8, rtol=0.0)
+
+
+def test_absorption_feature_map_defaults_to_full_subset():
+    rng = np.random.default_rng(31)
+    h, w, b = 3, 4, 30
+    wl = np.linspace(1000.0, 2500.0, b)
+    axis = np.arange(b, dtype=np.float64)
+    cube = 1.0 + rng.normal(0.0, 0.003, size=(h, w, b))
+    cube -= 0.05 * np.exp(-0.5 * ((axis - 15.0) / 2.3) ** 2)[None, None, :]
+
+    maps = absorption_feature_map(
+        cube,
+        wl,
+        8,
+        23,
+        degree=2,
+        n_iterations=3,
+        half_width=4,
+        continuum="none",
+    )
+
+    assert set(maps.keys()) == set(SCALAR_FEATURE_NAMES)
+    assert maps.valid.shape == (h, w)
+
+
+def test_absorption_feature_maps_supports_attribute_and_dict_access():
+    rng = np.random.default_rng(37)
+    h, w, b = 3, 4, 30
+    wl = np.linspace(1000.0, 2500.0, b)
+    axis = np.arange(b, dtype=np.float64)
+    cube = 1.0 + rng.normal(0.0, 0.003, size=(h, w, b))
+    cube -= 0.05 * np.exp(-0.5 * ((axis - 15.0) / 2.3) ** 2)[None, None, :]
+
+    maps = absorption_feature_map(
+        cube,
+        wl,
+        8,
+        23,
+        degree=2,
+        n_iterations=3,
+        half_width=4,
+        continuum="none",
+        feature_names=("depth", "width"),
+    )
+
+    assert np.array_equal(maps.depth, maps["depth"])
+    assert np.array_equal(maps.width, maps["width"])
+    assert maps.area is None
+    assert set(maps.as_dict()) == {"depth", "width"}
