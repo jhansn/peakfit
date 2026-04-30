@@ -35,6 +35,9 @@ This project uses two external datasets in the notebook:
    - Repository docs describe **SWIR** coverage around **1043–2486 nm**.  
    - Note: these ENVI headers do not contain explicit wavelength vectors, so the notebook uses a linear 1043–2486 nm axis across bands.
 
+## References
+- Saeid Asadzadeh, Carlos Roberto de Souza Filho, *Iterative Curve Fitting: A Robust Technique to Estimate the Wavelength Position and Depth of Absorption Features From Spectral Data*, IEEE Transactions on Geoscience and Remote Sensing, 2016. DOI: https://doi.org/10.1109/TGRS.2016.2577621
+
 ## Extremum Model
 For a local quadratic fit:
 
