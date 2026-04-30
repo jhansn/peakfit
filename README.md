@@ -24,19 +24,13 @@ Core implementation:
 This project uses two external datasets in the notebook:
 
 1. **USGS spectral library / lab spectra**  
-   - Becker et al., *VNIR and SWIR Spectra of Select Altered Mafic and Ultramafic Rock Samples*  
-   - DOI: https://doi.org/10.5066/P146B9KF  
    - File used: `ASD_FieldSpec6056.CSV`  
    - Coverage is VNIR+SWIR in source, and the notebook explicitly subsets to **SWIR** for analysis.
 
 2. **External close-range ENVI cubes**  
-   - Repository: https://github.com/panjoel4/ML-MineralMapping-Hyperspectral  
    - Files used: `10a_101012-120551_refl_ss.*`, `60a_101012-114407_refl_ss.*`  
    - Repository docs describe **SWIR** coverage around **1043–2486 nm**.  
    - Note: these ENVI headers do not contain explicit wavelength vectors, so the notebook uses a linear 1043–2486 nm axis across bands.
-
-## References
-- Saeid Asadzadeh, Carlos Roberto de Souza Filho, *Iterative Curve Fitting: A Robust Technique to Estimate the Wavelength Position and Depth of Absorption Features From Spectral Data*, IEEE Transactions on Geoscience and Remote Sensing, 2016. DOI: https://doi.org/10.1109/TGRS.2016.2577621
 
 ## Extremum Model
 For a local quadratic fit:
@@ -365,17 +359,27 @@ docker build --target test -t peakfit:test .
 ```
 
 ## References
-Polynomial fitting for absorption feature localization has been used in hyperspectral spectroscopy, for example:
+1. Asadzadeh, S., & de Souza Filho, C. R. (2016).  
+   *Iterative Curve Fitting: A Robust Technique to Estimate the Wavelength Position and Depth of Absorption Features From Spectral Data.*  
+   IEEE Transactions on Geoscience and Remote Sensing.  
+   https://doi.org/10.1109/TGRS.2016.2577621
 
-Rodger, A., Laukamp, C., Haest, M., & Cudahy, T. (2012).  
-*A simple quadratic method of absorption feature wavelength estimation in continuum-removed spectra.*  
-Remote Sensing of Environment, 118, 273-283.  
-https://doi.org/10.1016/j.rse.2011.11.015
+2. Rodger, A., Laukamp, C., Haest, M., & Cudahy, T. (2012).  
+   *A simple quadratic method of absorption feature wavelength estimation in continuum-removed spectra.*  
+   Remote Sensing of Environment, 118, 273-283.  
+   https://doi.org/10.1016/j.rse.2011.11.015
 
-Guo, B., Gunn, S. R., Damper, R. I., & Nelson, J. D. B. (2020).  
-*Enriching absorption features for hyperspectral materials identification.*  
-Optics Express, 28(3), 4127-4144.  
-https://doi.org/10.1364/OE.384580
+3. Guo, B., Gunn, S. R., Damper, R. I., & Nelson, J. D. B. (2020).  
+   *Enriching absorption features for hyperspectral materials identification.*  
+   Optics Express, 28(3), 4127-4144.  
+   https://doi.org/10.1364/OE.384580
+
+4. Becker et al.  
+   *VNIR and SWIR Spectra of Select Altered Mafic and Ultramafic Rock Samples.*  
+   https://doi.org/10.5066/P146B9KF
+
+5. ML-MineralMapping-Hyperspectral repository.  
+   https://github.com/panjoel4/ML-MineralMapping-Hyperspectral
 
 ## License
 This project is licensed under the MIT License. See [LICENSE](LICENSE).
